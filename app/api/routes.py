@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List
+from app.models.damage_processor import DamageProcessor
 
 router = APIRouter()
 
@@ -30,69 +31,67 @@ class AssessmentStatusResponse(BaseModel):
     progress: int = 0
     error: str = None
 
-# Store processing status in memory (in production, use database or Redis)
-processing_status: dict = {}
-
 @router.post("/assessments/process", response_model=ProcessAssessmentResponse)
 async def process_assessment(
     request: ProcessAssessmentRequest,
     background_tasks: BackgroundTasks
 ):
     """
-    Start processing an assessment.
-    
-    TODO: This is a stub endpoint. You need to:
-    1. Upload YOLO models to the backend
-    2. Implement the actual processing logic
-    3. Call YOLO models on photos
-    4. Calculate costs
-    5. Generate PDFs
+    Start processing an assessment with YOLO models.
+    Processing happens in background.
     """
-    # For now, just return a response indicating processing started
-    # In production, you would start actual AI processing here
-    
     assessment_id = request.assessment_id
     
-    # Set status to processing
-    processing_status[assessment_id] = {
-        "status": "processing",
-        "progress": 0,
-        "error": None
-    }
-    
-    # TODO: Add actual processing in background
-    # background_tasks.add_task(process_with_yolo, request.dict())
-    
-    # For now, simulate processing completion after 2 seconds
-    async def simulate_processing():
-        import asyncio
-        await asyncio.sleep(2)
-        processing_status[assessment_id] = {
-            "status": "completed",
-            "progress": 100,
-            "error": None
-        }
-    
-    background_tasks.add_task(simulate_processing)
+    # Start processing in background
+    processor = DamageProcessor()
+    background_tasks.add_task(
+        processor.process_assessment,
+        request.dict()
+    )
     
     return ProcessAssessmentResponse(
         assessment_id=assessment_id,
         status="processing",
-        message="Assessment processing started (stub - no AI processing yet)"
+        message="Assessment processing started"
     )
 
 @router.get("/assessments/{assessment_id}/status", response_model=AssessmentStatusResponse)
 async def get_assessment_status(assessment_id: str):
-    """Get processing status of an assessment"""
+    """Get processing status of an assessment from Supabase"""
+    from app.config import config
+    from supabase import create_client, Client
     
-    if assessment_id not in processing_status:
-        raise HTTPException(status_code=404, detail="Assessment not found")
+    if not config.SUPABASE_URL or not config.SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
     
-    status_data = processing_status[assessment_id]
+    supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY)
     
-    return AssessmentStatusResponse(
-        assessment_id=assessment_id,
-        status=status_data["status"],
-        progress=status_data.get("progress", 0),
-        error=status_data.get("error")
-    )
+    try:
+        response = supabase.table('assessments').select('status, metadata').eq('id', assessment_id).single().execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        
+        assessment = response.data
+        status = assessment.get('status', 'pending')
+        metadata = assessment.get('metadata', {})
+        error = metadata.get('error') if status == 'failed' else None
+        
+        # Estimate progress based on status
+        progress = 0
+        if status == 'processing':
+            progress = 50  # Processing
+        elif status == 'completed':
+            progress = 100
+        elif status == 'failed':
+            progress = 0
+        
+        return AssessmentStatusResponse(
+            assessment_id=assessment_id,
+            status=status,
+            progress=progress,
+            error=error
+        )
+    except Exception as e:
+        print(f"Error getting status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
