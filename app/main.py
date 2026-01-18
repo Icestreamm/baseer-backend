@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.routes import router
 
 app = FastAPI(
     title="Baseer Car Damage Assessment API",
@@ -16,11 +17,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API routes
+app.include_router(router, prefix="/api")
+
 @app.get("/")
 async def root():
     return {
         "message": "Baseer Car Damage Assessment API",
-        "status": "running"
+        "status": "running",
+        "note": "Processing endpoint is a stub - YOLO models not yet implemented"
     }
 
 @app.get("/health")
