@@ -77,14 +77,17 @@ async def get_assessment_status(assessment_id: str):
         metadata = assessment.get('metadata', {})
         error = metadata.get('error') if status == 'failed' else None
         
-        # Estimate progress based on status
-        progress = 0
-        if status == 'processing':
-            progress = 50  # Processing
-        elif status == 'completed':
-            progress = 100
-        elif status == 'failed':
-            progress = 0
+        # Get progress from metadata if available
+        progress = metadata.get('progress', 0)
+        
+        # Fallback: estimate progress based on status
+        if progress == 0:
+            if status == 'processing':
+                progress = 50  # Processing
+            elif status == 'completed':
+                progress = 100
+            elif status == 'failed':
+                progress = 0
         
         return AssessmentStatusResponse(
             assessment_id=assessment_id,
