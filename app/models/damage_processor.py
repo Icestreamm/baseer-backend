@@ -662,31 +662,30 @@ class DamageProcessor:
         update_data['metadata'].update({
             # Match Python script report_data keys
             'consensus_damage_cm2': round(total_consensus_area, 1),
-                'Paint Costs Local': cost_data['paint_costs_local'],  # Match Python key
-                'Lights Repair Cost (Local)': round(cost_data['light_cost_local'], 2),
-                'Windshield Repair Cost (Local)': round(cost_data['windshield_cost_local'], 2),
-                'Tire Repair Cost (Local)': round(cost_data['tire_cost_local'], 2),
-                'Subtotal Cost (Local)': round(cost_data['subtotal_local_base'], 2),
-                'Tax Amount (Local)': round(cost_data['tax_amount_on_base_local'], 2),
-                'Subtotal Post Base Tax (Local)': round(cost_data['subtotal_post_base_tax'], 2),
-                'Luxury Factor': round(cost_data['luxury_index'], 2),
-                'Final Cost (Local)': round(cost_data['final_local_cost'], 2),
-                'Sindhu Damage (cm²)': round(t1_total, 1),
-                'CDDCE Damage (cm²)': round(t2_total, 1),
-                'Capstone Damage (cm²)': round(t3_total, 1),
-                'Tax Rate': cost_data['tax_rate'],
-                'Light Damage Found': global_has_light_damage,
-                'Windshield Damage Found': global_has_windshield_damage,
-                # Also keep shorter keys for API compatibility
-                'paint_costs': cost_data['paint_costs_local'],
-                'light_repair_cost': cost_data['light_cost_local'],
-                'windshield_repair_cost': cost_data['windshield_cost_local'],
-                'tire_repair_cost': cost_data['tire_cost_local'],
-                'sindhu_damage_cm2': round(t1_total, 1),
-                'cddce_damage_cm2': round(t2_total, 1),
-                'capstone_damage_cm2': round(t3_total, 1),
-            }
-        }
+            'Paint Costs Local': cost_data['paint_costs_local'],  # Match Python key
+            'Lights Repair Cost (Local)': round(cost_data['light_cost_local'], 2),
+            'Windshield Repair Cost (Local)': round(cost_data['windshield_cost_local'], 2),
+            'Tire Repair Cost (Local)': round(cost_data['tire_cost_local'], 2),
+            'Subtotal Cost (Local)': round(cost_data['subtotal_local_base'], 2),
+            'Tax Amount (Local)': round(cost_data['tax_amount_on_base_local'], 2),
+            'Subtotal Post Base Tax (Local)': round(cost_data['subtotal_post_base_tax'], 2),
+            'Luxury Factor': round(cost_data['luxury_index'], 2),
+            'Final Cost (Local)': round(cost_data['final_local_cost'], 2),
+            'Sindhu Damage (cm²)': round(t1_total, 1),
+            'CDDCE Damage (cm²)': round(t2_total, 1),
+            'Capstone Damage (cm²)': round(t3_total, 1),
+            'Tax Rate': cost_data['tax_rate'],
+            'Light Damage Found': global_has_light_damage,
+            'Windshield Damage Found': global_has_windshield_damage,
+            # Also keep shorter keys for API compatibility
+            'paint_costs': cost_data['paint_costs_local'],
+            'light_repair_cost': cost_data['light_cost_local'],
+            'windshield_repair_cost': cost_data['windshield_cost_local'],
+            'tire_repair_cost': cost_data['tire_cost_local'],
+            'sindhu_damage_cm2': round(t1_total, 1),
+            'cddce_damage_cm2': round(t2_total, 1),
+            'capstone_damage_cm2': round(t3_total, 1),
+        })
         
         try:
             response = self.supabase.table('assessments').update(update_data).eq('id', assessment_id).execute()
