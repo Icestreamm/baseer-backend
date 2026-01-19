@@ -4,7 +4,10 @@ __pycache__/
 .env
 *.log
 credentials.json
-models/
+# Ignore root-level models/ directory (for YOLO model files)
+/models/
+# But allow app/models/ (source code)
+!app/models/
 temp_photos/
 temp_pdfs/
 .DS_Store
