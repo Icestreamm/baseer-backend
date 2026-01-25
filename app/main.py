@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
+from app.yolo import router as yolo_router  
 
 app = FastAPI(
     title="Baseer Car Damage Assessment API",
@@ -27,6 +28,9 @@ async def root():
         "status": "running",
         "note": "Processing endpoint is a stub - YOLO models not yet implemented"
     }
+
+app.include_router(yolo_router)
+
 
 @app.get("/health")
 async def health():
