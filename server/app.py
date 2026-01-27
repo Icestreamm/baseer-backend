@@ -16,7 +16,25 @@ CORS(app)  # Enable CORS for React Native app
 
 # Load YOLO model
 MODEL_PATH = os.getenv('MODEL_PATH', 'handle_best.pt')
-model = YOLO(MODEL_PATH)
+try:
+    model = YOLO(MODEL_PATH)
+    print(f'Model loaded successfully: {MODEL_PATH}')
+except Exception as e:
+    print(f'Error loading model: {e}')
+    model = None
+
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint - helps verify server is running"""
+    return jsonify({
+        'status': 'YOLO Model Server is running',
+        'endpoints': {
+            'health': '/health',
+            'predict': '/predict (POST)'
+        },
+        'model_loaded': model is not None,
+        'model_path': MODEL_PATH
+    })
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -57,6 +75,13 @@ def predict():
         except Exception as e:
             return jsonify({'error': f'Invalid image data: {str(e)}'}), 400
 
+        # Check if model is loaded
+        if model is None:
+            return jsonify({
+                'error': 'Model not loaded',
+                'message': 'YOLO model failed to load. Check server logs.'
+            }), 500
+
         # Run inference
         results = model(img, verbose=False)
         
@@ -92,4 +117,5 @@ def predict():
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 9001))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Increase timeout for large images and model inference
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
