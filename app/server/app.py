@@ -45,12 +45,21 @@ def health():
         'model_path': MODEL_PATH
     })
 
-@app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['POST', 'GET'])
 def predict():
     """
     Predict endpoint - matches Roboflow API format
     Accepts base64 encoded image and returns predictions
+    GET method for testing, POST for actual predictions
     """
+    # Handle GET requests for testing
+    if request.method == 'GET':
+        return jsonify({
+            'status': 'predict endpoint is available',
+            'method': 'Use POST to send image data',
+            'content_type': 'application/x-www-form-urlencoded or application/json'
+        })
+    
     try:
         # Get base64 image from request
         if request.content_type == 'application/x-www-form-urlencoded':
@@ -115,7 +124,31 @@ def predict():
             'message': 'Failed to process image'
         }), 500
 
+@app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def catch_all(path):
+    """Catch-all route for debugging - shows what routes are available"""
+    return jsonify({
+        'error': f'Route not found: /{path}',
+        'available_routes': {
+            'GET /': 'Server info',
+            'GET /health': 'Health check',
+            'POST /predict': 'Image prediction',
+            'GET /predict': 'Predict endpoint info'
+        },
+        'request_method': request.method,
+        'request_path': request.path,
+        'request_url': request.url
+    }), 404
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 9001))
+    
+    # Print all registered routes for debugging
+    print('=' * 60)
+    print('Registered Flask Routes:')
+    for rule in app.url_map.iter_rules():
+        print(f'  {rule.rule} -> {rule.endpoint} [{", ".join(rule.methods)}]')
+    print('=' * 60)
+    
     # Increase timeout for large images and model inference
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
