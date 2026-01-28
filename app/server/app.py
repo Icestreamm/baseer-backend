@@ -1,8 +1,8 @@
 """
 Flask API Server for YOLO Model Inference
-Runs your local YOLO model (handle_best.pt) behind a clean /predict API.
+Runs YOLO model (handle_best.pt) behind a clean /predict API.
+Model loads lazily on first prediction to avoid Render startup timeout.
 """
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from ultralytics import YOLO
@@ -12,16 +12,25 @@ import base64
 import os
 
 app = Flask(__name__)
-CORS(app)  # Allow calls from your Expo / React Native app
+CORS(app)  # Allow calls from your Expo / React Native iOS app
 
-# Load YOLO model once at startup
+# Global model variable — will be loaded only when needed
+model = None
 MODEL_PATH = os.getenv("MODEL_PATH", "handle_best.pt")
-try:
-    model = YOLO(MODEL_PATH)
-    print(f"[YOLO] Model loaded successfully from {MODEL_PATH}")
-except Exception as e:
-    print(f"[YOLO] ERROR loading model from {MODEL_PATH}: {e}")
-    model = None
+
+def load_model():
+    """Load the YOLO model only when first needed (lazy loading)."""
+    global model
+    if model is not None:
+        return  # already loaded
+
+    try:
+        print(f"[YOLO] Loading model from {MODEL_PATH} ... (may take 30-120s first time)")
+        model = YOLO(MODEL_PATH)
+        print(f"[YOLO] Model loaded successfully from {MODEL_PATH}")
+    except Exception as e:
+        print(f"[YOLO] ERROR loading model from {MODEL_PATH}: {e}")
+        model = None
 
 
 @app.route("/", methods=["GET"])
@@ -30,7 +39,7 @@ def root():
     return jsonify(
         {
             "status": "ok",
-            "message": "YOLO inference server",
+            "message": "YOLO inference server (model loads on first /predict)",
             "endpoints": {
                 "GET /health": "health check",
                 "POST /predict": "run YOLO on base64 image",
@@ -43,10 +52,10 @@ def root():
 
 @app.route("/health", methods=["GET"])
 def health():
-    """Health check used by your app before calling /predict."""
+    """Health check — fast response, no model loading here."""
     return jsonify(
         {
-            "status": "healthy" if model is not None else "model_not_loaded",
+            "status": "healthy" if model is not None else "model_not_loaded_yet",
             "model_loaded": model is not None,
             "model_path": MODEL_PATH,
         }
@@ -57,46 +66,47 @@ def health():
 def predict():
     """
     Run YOLO on an image.
-
     - GET: simple info response (for browser testing)
     - POST: perform inference
-
-    POST body formats supported:
-      1) Raw base64 in body with Content-Type: application/x-www-form-urlencoded
-      2) JSON: { "image": "<base64-string>" } with Content-Type: application/json
+    Supported POST body formats:
+      1) Raw base64 string (Content-Type: application/x-www-form-urlencoded or text/plain)
+      2) JSON: { "image": "<base64-string>" } (Content-Type: application/json)
     """
     if request.method == "GET":
         return jsonify(
             {
                 "status": "ok",
-                "usage": "POST base64 image to this endpoint to get YOLO predictions.",
-                "expect": {
-                    "json": {"image": "<base64>"},
-                    "or_raw": "raw base64 body with Content-Type application/x-www-form-urlencoded",
+                "usage": "Send POST with base64 image to get YOLO predictions.",
+                "body_options": {
+                    "json": {"image": "<base64-string>"},
+                    "raw": "raw base64 body (e.g. from mobile app)",
                 },
             }
         )
+
+    # Load model lazily on first real prediction request
+    load_model()
 
     if model is None:
         return (
             jsonify(
                 {
                     "error": "model_not_loaded",
-                    "message": f"YOLO model failed to load from {MODEL_PATH}",
+                    "message": f"Failed to load YOLO model from {MODEL_PATH}. Check server logs.",
                 }
             ),
             500,
         )
 
+    # Extract base64 image from request
     content_type = (request.headers.get("Content-Type") or "").lower()
     image_base64 = None
 
-    # JSON: { "image": "<base64>" }
     if "application/json" in content_type:
         data = request.get_json(silent=True) or {}
         image_base64 = data.get("image")
     else:
-        # Treat body as raw base64 (what your mobile app sends)
+        # Assume raw base64 body (common for mobile apps)
         image_base64 = request.get_data(as_text=True).strip()
 
     if not image_base64:
@@ -104,14 +114,14 @@ def predict():
             jsonify(
                 {
                     "error": "no_image",
-                    "message": "No image data provided. Send base64 in JSON {\"image\": \"...\"} or raw body.",
+                    "message": "No image data provided. Send base64 in JSON or raw body.",
                 }
             ),
             400,
         )
 
     try:
-        # Decode base64 into a PIL image
+        # Decode base64 → PIL Image
         img_bytes = base64.b64decode(image_base64)
         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     except Exception as e:
@@ -119,17 +129,18 @@ def predict():
             jsonify(
                 {
                     "error": "invalid_image",
-                    "message": f"Could not decode base64 image: {e}",
+                    "message": f"Could not decode base64 image: {str(e)}",
                 }
             ),
             400,
         )
 
     try:
+        # Run YOLO inference
         results = model(img, verbose=False)
         result = results[0]
-
         predictions = []
+
         if result.boxes is not None:
             for box in result.boxes:
                 predictions.append(
@@ -149,12 +160,13 @@ def predict():
                 "image": {"width": img.width, "height": img.height},
             }
         )
+
     except Exception as e:
         return (
             jsonify(
                 {
                     "error": "inference_error",
-                    "message": f"Failed to run YOLO inference: {e}",
+                    "message": f"Failed to run YOLO inference: {str(e)}",
                 }
             ),
             500,
@@ -163,14 +175,9 @@ def predict():
 
 @app.errorhandler(404)
 def not_found(_):
-    """
-    Simple, clean 404 handler.
-    Keeps logs minimal; no noisy stack traces for scanners.
-    """
+    """Clean 404 response."""
     return jsonify({"detail": "Not Found"}), 404
 
 
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 9001))
-    print(f"[YOLO] Starting Flask server on port {port}...")
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+# IMPORTANT: Do NOT add app.run() here — Render uses gunicorn
+# No if __name__ == "__main__" block needed
